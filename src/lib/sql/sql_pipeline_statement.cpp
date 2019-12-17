@@ -105,7 +105,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   
   // Handle logical query plan if statement has been cached
   if (lqp_cache) {
-    if (const auto cached_plan = lqp_cache->try_get(cache_hash)) {
+    if (const auto cached_plan = lqp_cache->try_get(std::to_string(cache_hash))) {
       const auto plan = *cached_plan;
       DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
       // MVCC-enabled and MVCC-disabled LQPs will evict each other
@@ -132,7 +132,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
-    lqp_cache->set(cache_hash, _optimized_logical_plan);
+    lqp_cache->set(std::to_string(cache_hash), _optimized_logical_plan);
   }
 
   return _optimized_logical_plan;
