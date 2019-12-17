@@ -151,6 +151,8 @@ class AbstractLQPNode : public std::enable_shared_from_this<AbstractLQPNode> {
    */
   size_t hash() const;
 
+  size_t hash_without_values() const;
+
   const LQPNodeType type;
 
   /**
@@ -176,6 +178,7 @@ class AbstractLQPNode : public std::enable_shared_from_this<AbstractLQPNode> {
    * data members.
    */
   virtual size_t _shallow_hash() const;
+  virtual size_t _shallow_hash_without_values() const;
   virtual std::shared_ptr<AbstractLQPNode> _on_shallow_copy(LQPNodeMapping& node_mapping) const = 0;
   virtual bool _on_shallow_equals(const AbstractLQPNode& rhs, const LQPNodeMapping& node_mapping) const = 0;
 
