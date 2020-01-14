@@ -151,8 +151,6 @@ class AbstractLQPNode : public std::enable_shared_from_this<AbstractLQPNode> {
    */
   size_t hash() const;
 
-  size_t hash_without_values() const;
-
   const LQPNodeType type;
 
   /**

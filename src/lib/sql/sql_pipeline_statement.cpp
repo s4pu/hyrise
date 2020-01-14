@@ -101,12 +101,56 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   }
 
   auto unoptimized_lqp = get_unoptimized_logical_plan();
-  auto cache_hash = unoptimized_lqp->hash_without_values();
+
+  std::vector<std::shared_ptr<AbstractExpression>> values;
+  ParameterID parameter_id(0);
+
+  std::cerr << "replaced a val=++++++++++++++++++++++++++++++++++++++++++++++=ue" << std::endl;
+
+
+  visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
+    if (node) {
+      std::cerr << "have a node===========================================================================================================ue" << std::endl;
+
+      for (auto& root_expression : node->node_expressions) {
+        visit_expression(root_expression, [&values, &parameter_id](auto& expression) {
+          std::cerr << "have an expression of type "<< static_cast<size_t>(expression->type) <<"===========================================================================================================ue" << std::endl;
+
+          if (expression->type == ExpressionType::Value) {
+            std::cerr << "have a value expression===========================================================================================================ue" << std::endl;
+            values.push_back(expression);
+            expression = std::make_shared<PlaceholderExpression>(parameter_id);
+            parameter_id++;
+            std::cerr << "replaced a val==============================================================================================================ue" << std::endl;
+          }
+          if (expression->type == ExpressionType::Placeholder) {
+            std::cerr << "OH NO IT IS ALREADY A PLACEHOLDER===========================================================================================================ue" << std::endl;
+          }
+          return ExpressionVisitation::VisitArguments;
+        });
+      }
+    }
+    return LQPVisitation::VisitInputs;
+  });
+
+
+
+  // Handle logical query plan if statement has been cached
+  std::cout << unoptimized_lqp->hash() << std::endl;
+
+  std::cout << *unoptimized_lqp << std::endl;
+  
+  std::cout << "LQP CACHE SIZE IS -------------------------------------- " << lqp_cache->size() << std::endl;
+
+  /*for (auto &e : *lqp_cache) {
+    std::cout << "KEYYYYYY " << e.first << std::endl;
+    std::cout << "VALUEEEE " << *(e.second) << std::endl;
+  }*/
   
   // Handle logical query plan if statement has been cached
   if (lqp_cache) {
-    if (const auto cached_plan = lqp_cache->try_get(std::to_string(cache_hash))) {
-      const auto plan = *cached_plan;
+    if (const auto cached_plan = lqp_cache->try_get(unoptimized_lqp)) {
+      const auto plan = (*cached_plan)->lqp;
       DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
       // MVCC-enabled and MVCC-disabled LQPs will evict each other
       if (lqp_is_validated(plan) == (_use_mvcc == UseMvcc::Yes)) {
@@ -125,14 +169,20 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   // As the unoptimized LQP is only used for visualization, we can afford to recreate it if necessary.
   _unoptimized_logical_plan = nullptr;
 
-  _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp));
+  // There has to be a better way to copy an unoptimized LQP
+  auto ulqp = unoptimized_lqp->deep_copy();
+
+  // std::cout << "ZWEI GLEICHE BÄUME SIND GLEICH: " << (*unoptimized_lqp == *ulqp) << std::endl;
+  // std::cout << "DIE POINTER AUF ZWEI GLEICHE BÄUME SIND GLEICH: " << (unoptimized_lqp == ulqp) << std::endl;  
+
+  auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
 
   const auto done = std::chrono::high_resolution_clock::now();
   _metrics->optimization_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(done - started);
 
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
-    lqp_cache->set(std::to_string(cache_hash), _optimized_logical_plan);
+    lqp_cache->set(unoptimized_lqp, prepared_plan);
   }
 
   return _optimized_logical_plan;

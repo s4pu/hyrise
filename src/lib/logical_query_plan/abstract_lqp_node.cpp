@@ -88,27 +88,6 @@ size_t AbstractLQPNode::hash() const {
   return hash;
 }
 
-// currently hash without expressions
-size_t AbstractLQPNode::hash_without_values() const {
-  size_t hash{0};
-
-  visit_lqp(shared_from_this(), [&hash](const auto& node) {
-    if (node) {
-      boost::hash_combine(hash, node->type);
-      boost::hash_combine(hash, node->_shallow_hash());
-      return LQPVisitation::VisitInputs;
-    } else {
-      return LQPVisitation::DoNotVisitInputs;
-    }
-  });
-
-  return hash;
-}
-
-size_t AbstractLQPNode::_shallow_hash_without_values() const {
-  return _shallow_hash();  
-}
-
 size_t AbstractLQPNode::_shallow_hash() const { return 0; }
 
 std::shared_ptr<AbstractLQPNode> AbstractLQPNode::left_input() const { return _inputs[0]; }
