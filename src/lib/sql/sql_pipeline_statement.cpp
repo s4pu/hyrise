@@ -103,11 +103,12 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   }
 
   auto statement = get_parsed_sql_statement()->getStatement(0);
+  auto select_statement = dynamic_cast<const hsql::SelectStatement *>(statement);
+
   if (statement->isType(hsql::StatementType::kStmtSelect)) {
     // Handle logical query plan if statement has been cached
     if (lqp_cache) {
-      auto select_statement = dynamic_cast<const hsql::SelectStatement *>(statement);
-      if (const auto cached_plan = lqp_cache->try_get(select_statement->hash()) {
+      if (const auto cached_plan = lqp_cache->try_get(select_statement->hash())) {
         const auto plan = *cached_plan;
         DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
         // MVCC-enabled and MVCC-disabled LQPs will evict each other
