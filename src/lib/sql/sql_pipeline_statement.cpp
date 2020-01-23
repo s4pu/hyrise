@@ -58,13 +58,32 @@ SQLPipelineStatement::SQLPipelineStatement(const std::string& sql, std::shared_p
 const std::string& SQLPipelineStatement::get_sql_string() { return _sql_string; }
 
 const std::shared_ptr<hsql::SQLParserResult>& SQLPipelineStatement::get_parsed_sql_statement() {
+  std::cout << "############################### I AM IN FRONT OF THE pSQL ##############################" << std::endl;
   if (_parsed_sql_statement) {
+    std::cout << "SIZE________: " << _parsed_sql_statement->getStatements().size() << std::endl;
+    for (auto statement : _parsed_sql_statement->getStatements()) {
+      if (statement->type() == hsql::StatementType::kStmtSelect) {
+        auto selectStatement = dynamic_cast<hsql::SelectStatement*>(statement);
+        for (auto e : *(selectStatement->selectList)) {
+          if (e->name != nullptr) std::cout << "+++++++ selectListElement: " << e->name << std::endl;
+        }
+        if (selectStatement->whereClause->name != nullptr) std::cout << "+++++++ whereClause: " << selectStatement->whereClause->name << " ivals: " << selectStatement->whereClause->ival << " " << selectStatement->whereClause->ival2 << std::endl;
+        //std::cout << "+++++++ groupBy: " << *(selectStatement->groupBy) << std::endl;
+        //std::cout << "+++++++ LimitDescription: " << *(selectStatement->limit) << std::endl;
+      }
+    }
     return _parsed_sql_statement;
   }
 
   DebugAssert(!_sql_string.empty(), "Cannot parse empty SQL string");
 
   _parsed_sql_statement = std::make_shared<hsql::SQLParserResult>();
+
+  std::cout << "############################### I AM HERE ##############################" << std::endl;
+
+  for (auto e : _parsed_sql_statement->parameters()) {
+    std::cout << "PARAMETERZZZZZZZZZZZ: " << e << std::endl;
+  }
 
   hsql::SQLParser::parse(_sql_string, _parsed_sql_statement.get());
 
@@ -78,6 +97,7 @@ const std::shared_ptr<hsql::SQLParserResult>& SQLPipelineStatement::get_parsed_s
 }
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_logical_plan() {
+  std::cout << "############################### I IN FRONT OF uLQP ##############################" << std::endl;
   if (_unoptimized_logical_plan) {
     return _unoptimized_logical_plan;
   }
@@ -101,9 +121,12 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_lo
 }
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logical_plan() {
+  std::cout << "############################### I AM IN FRONT OF LQP ##############################" << std::endl;
   if (_optimized_logical_plan) {
     return _optimized_logical_plan;
   }
+
+  
 
   auto unoptimized_lqp = get_unoptimized_logical_plan();
 
