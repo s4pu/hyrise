@@ -3,15 +3,12 @@
 #include <fstream>
 #include <iomanip>
 #include <utility>
-#include <numeric>
 
 #include <boost/algorithm/string.hpp>
 
 #include "SQLParser.h"
 #include "create_sql_parser_error_message.hpp"
 #include "expression/value_expression.hpp"
-#include "expression/placeholder_expression.hpp"
-#include "expression/expression_utils.hpp"
 #include "hyrise.hpp"
 #include "logical_query_plan/lqp_utils.hpp"
 #include "operators/import.hpp"
@@ -58,32 +55,13 @@ SQLPipelineStatement::SQLPipelineStatement(const std::string& sql, std::shared_p
 const std::string& SQLPipelineStatement::get_sql_string() { return _sql_string; }
 
 const std::shared_ptr<hsql::SQLParserResult>& SQLPipelineStatement::get_parsed_sql_statement() {
-  std::cout << "############################### I AM IN FRONT OF THE pSQL ##############################" << std::endl;
   if (_parsed_sql_statement) {
-    std::cout << "SIZE________: " << _parsed_sql_statement->getStatements().size() << std::endl;
-    for (auto statement : _parsed_sql_statement->getStatements()) {
-      if (statement->type() == hsql::StatementType::kStmtSelect) {
-        auto selectStatement = dynamic_cast<hsql::SelectStatement*>(statement);
-        for (auto e : *(selectStatement->selectList)) {
-          if (e->name != nullptr) std::cout << "+++++++ selectListElement: " << e->name << std::endl;
-        }
-        if (selectStatement->whereClause->name != nullptr) std::cout << "+++++++ whereClause: " << selectStatement->whereClause->name << " ivals: " << selectStatement->whereClause->ival << " " << selectStatement->whereClause->ival2 << std::endl;
-        //std::cout << "+++++++ groupBy: " << *(selectStatement->groupBy) << std::endl;
-        //std::cout << "+++++++ LimitDescription: " << *(selectStatement->limit) << std::endl;
-      }
-    }
     return _parsed_sql_statement;
   }
 
   DebugAssert(!_sql_string.empty(), "Cannot parse empty SQL string");
 
   _parsed_sql_statement = std::make_shared<hsql::SQLParserResult>();
-
-  std::cout << "############################### I AM HERE ##############################" << std::endl;
-
-  for (auto e : _parsed_sql_statement->parameters()) {
-    std::cout << "PARAMETERZZZZZZZZZZZ: " << e << std::endl;
-  }
 
   hsql::SQLParser::parse(_sql_string, _parsed_sql_statement.get());
 
@@ -97,7 +75,6 @@ const std::shared_ptr<hsql::SQLParserResult>& SQLPipelineStatement::get_parsed_s
 }
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_logical_plan() {
-  std::cout << "############################### I IN FRONT OF uLQP ##############################" << std::endl;
   if (_unoptimized_logical_plan) {
     return _unoptimized_logical_plan;
   }
@@ -121,75 +98,48 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_lo
 }
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logical_plan() {
-  std::cout << "############################### I AM IN FRONT OF LQP ##############################" << std::endl;
   if (_optimized_logical_plan) {
     return _optimized_logical_plan;
   }
 
-  
-
-  auto unoptimized_lqp = get_unoptimized_logical_plan();
-
-  std::vector<std::shared_ptr<AbstractExpression>> values;
-  ParameterID parameter_id(0);
-
-  visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
-    if (node) {
-      for (auto& root_expression : node->node_expressions) {
-        visit_expression(root_expression, [&values, &parameter_id](auto& expression) {
-          if (expression->type == ExpressionType::Value) {
-            values.push_back(expression);
-            expression = std::make_shared<PlaceholderExpression>(parameter_id);
-            parameter_id++;
-          }
-          return ExpressionVisitation::VisitArguments;
-        });
-      }
-    }
-    return LQPVisitation::VisitInputs;
-  });
-
-
-  const auto started = std::chrono::high_resolution_clock::now();
-  // Handle logical query plan if statement has been cached
-  if (lqp_cache) {
-    if (const auto cached_plan = lqp_cache->try_get(unoptimized_lqp)) {
-      const auto plan = (*cached_plan)->lqp;
-      DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
-      // MVCC-enabled and MVCC-disabled LQPs will evict each other
-      if (lqp_is_validated(plan) == (_use_mvcc == UseMvcc::Yes)) {
-        // Copy the LQP for reuse as the LQPTranslator might modify mutable fields (e.g., cached column_expressions)
-        // and concurrent translations might conflict.
-        _optimized_logical_plan = (*cached_plan)->instantiate(values);
-        const auto done = std::chrono::high_resolution_clock::now();
-        _metrics->optimization_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(done - started);
-        return _optimized_logical_plan;
+  auto statement = get_parsed_sql_statement()->getStatement(0);
+  if (statement->isType(hsql::StatementType::kStmtSelect)) {
+    // Handle logical query plan if statement has been cached
+    if (lqp_cache) {
+      auto select_statement = dynamic_cast<const hsql::SelectStatement *>(statement);
+      if (const auto cached_plan = lqp_cache->try_get(select_statement->hash()) {
+        const auto plan = *cached_plan;
+        DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
+        // MVCC-enabled and MVCC-disabled LQPs will evict each other
+        if (lqp_is_validated(plan) == (_use_mvcc == UseMvcc::Yes)) {
+          // Copy the LQP for reuse as the LQPTranslator might modify mutable fields (e.g., cached column_expressions)
+          // and concurrent translations might conflict.
+          _optimized_logical_plan = plan->deep_copy();
+          return _optimized_logical_plan;
+        }
       }
     }
   }
+
+  auto unoptimized_lqp = get_unoptimized_logical_plan();
+
+  const auto started = std::chrono::high_resolution_clock::now();
 
   // The optimizer works on the original unoptimized LQP nodes. After optimizing, the unoptimized version is also
   // optimized, which could lead to subtle bugs. optimized_logical_plan holds the original values now.
   // As the unoptimized LQP is only used for visualization, we can afford to recreate it if necessary.
   _unoptimized_logical_plan = nullptr;
 
-  // There has to be a better way to copy an unoptimized LQP
-  auto ulqp = unoptimized_lqp->deep_copy();
-  auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
+  _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp));
 
   const auto done = std::chrono::high_resolution_clock::now();
   _metrics->optimization_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(done - started);
 
-  std::vector<ParameterID> all_parameter_ids(parameter_id);
-  std::iota(all_parameter_ids.begin(), all_parameter_ids.end(), 0);
-  auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
-
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
-    lqp_cache->set(unoptimized_lqp, prepared_plan);
+    lqp_cache->set(select_statement->hash(), _optimized_logical_plan);
   }
 
-  _optimized_logical_plan = prepared_plan->instantiate(values);
   return _optimized_logical_plan;
 }
 
@@ -208,7 +158,7 @@ const std::shared_ptr<AbstractOperator>& SQLPipelineStatement::get_physical_plan
   auto done = started;  // dummy value needed for initialization
 
   // Try to retrieve the PQP from cache
-  /*if (pqp_cache) {
+  if (pqp_cache) {
     if (const auto cached_physical_plan = pqp_cache->try_get(_sql_string)) {
       if ((*cached_physical_plan)->transaction_context_is_set()) {
         Assert(_use_mvcc == UseMvcc::Yes, "Trying to use MVCC cached query without a transaction context.");
@@ -219,7 +169,7 @@ const std::shared_ptr<AbstractOperator>& SQLPipelineStatement::get_physical_plan
       _physical_plan = (*cached_physical_plan)->deep_copy();
       _metrics->query_plan_cache_hit = true;
     }
-  }*/
+  }
 
   if (!_physical_plan) {
     // "Normal" path in which the query plan is created instead of begin retrieved from cache

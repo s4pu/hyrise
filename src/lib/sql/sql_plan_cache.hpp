@@ -12,22 +12,9 @@ namespace opossum {
 class AbstractOperator;
 class AbstractLQPNode;
 
-namespace cache_types {
-class Hash {
- public:
-  size_t operator()(const std::shared_ptr<AbstractLQPNode>& key) const {
-    return key->hash();
-  }
-};
-class DeepEquality {
- public:
-  bool operator()(const std::shared_ptr<AbstractLQPNode>& key1, const std::shared_ptr<AbstractLQPNode>& key2) const {
-    return *key1 == *key2;
-  }
-};
 
 using SQLPhysicalPlanCache = Cache<std::shared_ptr<AbstractOperator>, std::string>;
-using SQLLogicalPlanCache = Cache<std::shared_ptr<PreparedPlan>, std::shared_ptr<AbstractLQPNode>, Hash, DeepEquality>;
+using SQLLogicalPlanCache = Cache<std::shared_ptr<PreparedPlan>, size_t>;
 }
 using cache_types::SQLPhysicalPlanCache;
 using cache_types::SQLLogicalPlanCache;
