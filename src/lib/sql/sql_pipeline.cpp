@@ -129,8 +129,8 @@ const std::vector<std::shared_ptr<AbstractLQPNode>>& SQLPipeline::get_unoptimize
          "Cannot translate all statements without executing, i.e. calling get_result_table()");
 
   _unoptimized_logical_plans.reserve(statement_count());
-  for (auto& pipeline_statement : _sql_pipeline_statements) {
-    _unoptimized_logical_plans.push_back(pipeline_statement->get_unoptimized_logical_plan());
+  for(size_t i=0; i < _sql_pipeline_statements.size(); i++) {
+    _unoptimized_logical_plans.push_back(_sql_pipeline_statements[i]->get_unoptimized_logical_plan(_parsed_sql_statements[i]));
   }
 
   return _unoptimized_logical_plans;

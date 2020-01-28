@@ -61,7 +61,7 @@ class SQLPipelineStatement : public Noncopyable {
   const std::shared_ptr<hsql::SQLParserResult>& get_parsed_sql_statement();
 
   // Returns the unoptimized LQP for this statement.
-  const std::shared_ptr<AbstractLQPNode>& get_unoptimized_logical_plan();
+  const std::shared_ptr<AbstractLQPNode>& get_unoptimized_logical_plan(std::shared_ptr<hsql::SQLParserResult>& parsed_sql);
 
   // Returns the optimized LQP for this statement.
   const std::shared_ptr<AbstractLQPNode>& get_optimized_logical_plan();

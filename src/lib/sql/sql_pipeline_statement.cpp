@@ -74,12 +74,10 @@ const std::shared_ptr<hsql::SQLParserResult>& SQLPipelineStatement::get_parsed_s
   return _parsed_sql_statement;
 }
 
-const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_logical_plan() {
+const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_logical_plan(std::shared_ptr<hsql::SQLParserResult>& parsed_sql) {
   if (_unoptimized_logical_plan) {
     return _unoptimized_logical_plan;
   }
-
-  auto parsed_sql = get_parsed_sql_statement();
 
   const auto started = std::chrono::high_resolution_clock::now();
 
@@ -102,13 +100,32 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
     return _optimized_logical_plan;
   }
 
-  auto statement = get_parsed_sql_statement()->getStatement(0);
+  auto parsed_sql = get_parsed_sql_statement();
+  auto statement = parsed_sql->getStatement(0);
+  std::cout << "Get statement hat funktioniert" << std::endl;
   auto select_statement = dynamic_cast<const hsql::SelectStatement *>(statement);
 
   if (statement->isType(hsql::StatementType::kStmtSelect)) {
+
+      std::cout << "Es ist ein select statement" << std::endl;
+
+      std::vector<hsql::Expr> values;
+      select_statement->extractValues(values);
+
+      std::cout << "extract values hat funktioniert" << std::endl;
+
+      for (auto& value : values) {
+          if(value.name)  {
+              std::cout << "Values: " << value.name << std::endl;
+          } else {
+              std::cout << "Namenloser expr" << std::endl;
+          }
+      }
+
     // Handle logical query plan if statement has been cached
     if (lqp_cache) {
       if (const auto cached_plan = lqp_cache->try_get(select_statement->hash())) {
+
         const auto plan = *cached_plan;
         DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
         // MVCC-enabled and MVCC-disabled LQPs will evict each other
@@ -122,7 +139,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
     }
   }
 
-  auto unoptimized_lqp = get_unoptimized_logical_plan();
+  auto unoptimized_lqp = get_unoptimized_logical_plan(parsed_sql);
 
   const auto started = std::chrono::high_resolution_clock::now();
 
