@@ -130,7 +130,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   const auto started = std::chrono::high_resolution_clock::now();
   // Handle logical query plan if statement has been cached
   if (lqp_cache) {
-    if (const auto cached_plan = lqp_cache->try_get(unoptimized_lqp)) {
+    if (const auto cached_plan = lqp_cache->try_get(unoptimized_lqp->hash())) {
       const auto plan = (*cached_plan)->lqp;
       DebugAssert(plan, "Optimized logical query plan retrieved from cache is empty.");
       // MVCC-enabled and MVCC-disabled LQPs will evict each other
@@ -151,8 +151,9 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   _unoptimized_logical_plan = nullptr;
 
   // There has to be a better way to copy an unoptimized LQP
-  auto ulqp = unoptimized_lqp->deep_copy();
-  auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
+  // auto ulqp = unoptimized_lqp->deep_copy();
+  auto unoptimzed_lqp_hash = unoptimized_lqp->hash();
+  auto optimized_without_values = _optimizer->optimize(std::move(unoptimized_lqp));
 
   const auto done = std::chrono::high_resolution_clock::now();
   _metrics->optimization_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(done - started);
@@ -163,7 +164,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
-    lqp_cache->set(unoptimized_lqp, prepared_plan);
+    lqp_cache->set(unoptimzed_lqp_hash, prepared_plan);
   }
 
   _optimized_logical_plan = prepared_plan->instantiate(values);
