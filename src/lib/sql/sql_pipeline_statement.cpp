@@ -114,7 +114,6 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
     });*/
 
-    if (unoptimized_lqp->type != opossum::LQPNodeType::Alias) {
     visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
         if (node) {
             for (auto& root_expression : node->node_expressions) {
@@ -141,7 +140,6 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
         }
         return LQPVisitation::VisitInputs;
     });
-    }
 
     return unoptimized_lqp;
 }
