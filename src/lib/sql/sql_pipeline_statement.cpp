@@ -114,18 +114,19 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
     });*/
 
+    auto visited_one_expression = false;
     visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
-        if (node) {
+      // first alias node is ok, second is not
+        if (node && (node->type != opossum::LQPNodeType::Alias || node->type == opossum::LQPNodeType::Alias && !visited_one_expression)) {
             for (auto& root_expression : node->node_expressions) {
                 visit_expression(root_expression, [&values, &parameter_id](auto& expression) {
                     if (expression->type == ExpressionType::Value) {
+                      const auto valexp = std::dynamic_pointer_cast<ValueExpression>(expression);
                       if (expression->replaced_by) {
-                        const auto valexp = std::dynamic_pointer_cast<ValueExpression>(expression);
                         std::cout << "================== took out expression again: " << valexp->value << " ============" << std::endl;
                         expression = expression->replaced_by;
 
                       } else {
-                        const auto valexp = std::dynamic_pointer_cast<ValueExpression>(expression);
                         std::cout << "================== took out expression: " << valexp->value << " ============" << std::endl;
                         values.push_back(expression);
                         auto new_expression = std::make_shared<TypedPlaceholderExpression>(parameter_id, expression->data_type());
