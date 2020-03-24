@@ -114,7 +114,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
     });*/
 
-    auto visited_one_alias = false;
+    bool visited_one_alias = false;
     visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
       // first alias node is ok, second is not
         if (node && (node->type != opossum::LQPNodeType::Alias || node->type == opossum::LQPNodeType::Alias && !visited_one_alias)) {
