@@ -118,7 +118,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
     visit_lqp(unoptimized_lqp, [&values, &parameter_id, visited_one_alias](const auto& node) mutable {
       // first alias node is ok, second is not
         if (node) {
-          if (visited_one_alias) { break; };
+          if (visited_one_alias) { return LQPVisitation::VisitInputs; };
           if (node->type == opossum::LQPNodeType::Alias) { visited_one_alias = true; };
             for (auto& root_expression : node->node_expressions) {
                 visit_expression(root_expression, [&values, &parameter_id](auto& expression) {
