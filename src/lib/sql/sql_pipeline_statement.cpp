@@ -315,7 +315,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   const auto ulqp2 = unoptimized_lqp2->deep_copy();
 
   auto optimized_with_values = _optimizer->optimize(std::move(ulqp2));
-  auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
+  //auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
 
   std::vector<std::shared_ptr<AbstractExpression>> values2;
   const auto optimized_lqp_without = get_split_optimized_logical_plan(values2);
@@ -328,7 +328,8 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   std::vector<ParameterID> all_parameter_ids(values.size());
   std::iota(all_parameter_ids.begin(), all_parameter_ids.end(), 0);
-  auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
+  //auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
+  auto prepared_plan = std::make_shared<PreparedPlan>(optimized_lqp_without, all_parameter_ids);
 
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
