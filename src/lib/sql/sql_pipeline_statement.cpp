@@ -285,7 +285,6 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp2));
   std::cout << "Test001" << std::endl;
 
-  /*
   std::vector<std::shared_ptr<AbstractExpression>> values;
   const auto unoptimized_lqp = get_split_unoptimized_logical_plan(values);
 
@@ -362,8 +361,6 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
       done_preoptimization_cache - started_preoptimization_cache + done_postoptimization_cache -
       started_postoptimization_cache);
   _metrics->cache_duration -= _metrics->uniform_check_duration;
-
-  */
 
   return _optimized_logical_plan;
 }
