@@ -254,6 +254,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
     return _optimized_logical_plan;
   }
 
+  /*
   // views and non-uniformly distributed tables can not be cached
   if(!_translation_info.cacheable || !is_uniformly_distributed(100)) {
     const auto started = std::chrono::high_resolution_clock::now();
@@ -271,6 +272,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
     return _optimized_logical_plan;
   }
+   */
 
   //const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
