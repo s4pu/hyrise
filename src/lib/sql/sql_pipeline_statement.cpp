@@ -316,7 +316,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp2));
 
   // optimize plan without values
-  auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
+  // auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
 
   // remove values from optimized plan
   std::vector<std::shared_ptr<AbstractExpression>> values2;
