@@ -279,7 +279,10 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   std::cout << "Test0" << std::endl;
 
   _unoptimized_logical_plan = nullptr;
-  auto optimized_with_values = _optimizer->optimize(std::move(unoptimized_lqp2));
+  std::cout << "Test00" << std::endl;
+
+  //auto optimized_with_values = _optimizer->optimize(std::move(unoptimized_lqp2));
+  _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp2));
   std::cout << "Test001" << std::endl;
 
   std::vector<std::shared_ptr<AbstractExpression>> values;
