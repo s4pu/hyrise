@@ -211,7 +211,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_optimized_logical_plan(
     std::vector<std::shared_ptr<AbstractExpression>>& values) {
-  auto& optimized_lqp = get_optimized_logical_plan();
+  auto& optimized_lqp = _optimized_logical_plan;
 
   ParameterID parameter_id(0);
 
@@ -275,6 +275,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
   const auto unoptimized_lqp2 = get_unoptimized_logical_plan();
+  const auto ulqp2 = unoptimized_lqp2->deep_copy();
 
   std::vector<std::shared_ptr<AbstractExpression>> values;
   const auto unoptimized_lqp = get_split_unoptimized_logical_plan(values);
@@ -307,15 +308,17 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   // As the unoptimized LQP is only used for visualization, we can afford to recreate it if necessary.
   _unoptimized_logical_plan = nullptr;
 
-  auto ulqp = unoptimized_lqp->deep_copy();
+  //auto ulqp = unoptimized_lqp->deep_copy();
 
   const auto done_preoptimization_cache = std::chrono::high_resolution_clock::now();
   const auto started_optimize = std::chrono::high_resolution_clock::now();
 
-  const auto ulqp2 = unoptimized_lqp2->deep_copy();
+  //const auto ulqp2 = unoptimized_lqp2->deep_copy();
 
   auto optimized_with_values = _optimizer->optimize(std::move(ulqp2));
   //auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
+
+  _optimized_logical_plan = optimized_with_values;
 
   std::vector<std::shared_ptr<AbstractExpression>> values2;
   const auto optimized_lqp_without = get_split_optimized_logical_plan(values2);
