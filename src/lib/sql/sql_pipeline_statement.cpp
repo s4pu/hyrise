@@ -272,7 +272,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
     return _optimized_logical_plan;
   }
 
-  const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
+  //const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
   const auto unoptimized_lqp2 = get_unoptimized_logical_plan();
   //const auto ulqp2 = unoptimized_lqp2->deep_copy();
