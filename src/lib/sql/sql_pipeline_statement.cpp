@@ -274,12 +274,6 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
-  auto unoptimized_lqp2 = get_unoptimized_logical_plan();
-  _unoptimized_logical_plan = nullptr;
-
-  //auto optimized_with_values = _optimizer->optimize(std::move(unoptimized_lqp2));
-  _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp2));
-
   std::vector<std::shared_ptr<AbstractExpression>> values;
   const auto unoptimized_lqp = get_split_unoptimized_logical_plan(values);
 
@@ -306,6 +300,8 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
     }
   }
 
+  auto unoptimized_lqp2 = get_unoptimized_logical_plan();
+
   // The optimizer works on the original unoptimized LQP nodes. After optimizing, the unoptimized version is also
   // optimized, which could lead to subtle bugs. optimized_logical_plan holds the original values now.
   // As the unoptimized LQP is only used for visualization, we can afford to recreate it if necessary.
@@ -316,15 +312,15 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   const auto done_preoptimization_cache = std::chrono::high_resolution_clock::now();
   const auto started_optimize = std::chrono::high_resolution_clock::now();
 
-  //const auto ulqp2 = unoptimized_lqp2->deep_copy();
+  // optimize plan with values
+  _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp2));
 
-  //auto optimized_with_values = _optimizer->optimize(std::move(ulqp2));
+  // optimize plan without values
   auto optimized_without_values = _optimizer->optimize(std::move(ulqp));
 
-  //_optimized_logical_plan = optimized_with_values->deep_copy();
-
+  // remove values from optimized plan
   std::vector<std::shared_ptr<AbstractExpression>> values2;
-  const auto optimized_lqp_without = get_split_optimized_logical_plan(values2);
+  const auto optimized_then_removed = get_split_optimized_logical_plan(values2);
 
   const auto done_optimize = std::chrono::high_resolution_clock::now();
   _metrics->optimization_duration =
@@ -334,8 +330,12 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   std::vector<ParameterID> all_parameter_ids(values.size());
   std::iota(all_parameter_ids.begin(), all_parameter_ids.end(), 0);
+
+  // prepared plan: first optimized then removed
+  auto prepared_plan = std::make_shared<PreparedPlan>(optimized_then_removed, all_parameter_ids);
+
+  // prepared plan: first removed then optimized
   //auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
-  auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
 
   // Cache newly created plan for the according sql statement
   if (lqp_cache) {
