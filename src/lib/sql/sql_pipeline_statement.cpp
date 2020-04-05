@@ -275,11 +275,11 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
   const auto unoptimized_lqp2 = get_unoptimized_logical_plan();
-  const auto ulqp2 = unoptimized_lqp2->deep_copy();
+  //const auto ulqp2 = unoptimized_lqp2->deep_copy();
   std::cout << "Test0" << std::endl;
 
   _unoptimized_logical_plan = nullptr;
-  auto optimized_with_values = _optimizer->optimize(std::move(ulqp2));
+  auto optimized_with_values = _optimizer->optimize(std::move(unoptimized_lqp2));
   std::cout << "Test001" << std::endl;
 
   std::vector<std::shared_ptr<AbstractExpression>> values;
