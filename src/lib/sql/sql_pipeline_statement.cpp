@@ -189,7 +189,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
               const auto valexp = std::dynamic_pointer_cast<ValueExpression>(expression);
               if (valexp->data_type() != DataType::Null) {
                 assert(expression->arguments.empty());
-                std::cout << "value nr: " << parameter_id << ", value: " << valexp.value << std::endl;
+                std::cout << "value nr: " << parameter_id << ", value: " << valexp->value << std::endl;
                 values.push_back(expression);
                 auto new_expression =
                     std::make_shared<TypedPlaceholderExpression>(parameter_id, expression->data_type());
@@ -229,7 +229,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_optimize
               const auto valexp = std::dynamic_pointer_cast<ValueExpression>(expression);
               if (valexp->data_type() != DataType::Null) {
                 assert(expression->arguments.empty());
-                std::cout << "value nr: " << parameter_id << ", value: " << valexp.value << std::endl;
+                std::cout << "value nr: " << parameter_id << ", value: " << valexp->value << std::endl;
                 values.push_back(expression);
                 auto new_expression =
                     std::make_shared<TypedPlaceholderExpression>(parameter_id, expression->data_type());
