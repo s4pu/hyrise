@@ -97,6 +97,9 @@ class SQLPipelineStatement : public Noncopyable {
   const std::shared_ptr<AbstractLQPNode>& get_split_unoptimized_logical_plan(
       std::vector<std::shared_ptr<AbstractExpression>>& values);
 
+  const std::shared_ptr<AbstractLQPNode>& get_split_optimized_logical_plan(
+      std::vector<std::shared_ptr<AbstractExpression>>& values);
+
  private:
   // Performs a sanity check in order to prevent an execution of a predictably failing DDL operator (e.g., creating a
   // table that already exists).
