@@ -274,7 +274,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
 
   const auto started_preoptimization_cache = std::chrono::high_resolution_clock::now();
 
-  const auto unoptimized_lqp2 = get_unoptimized_logical_plan(values);
+  const auto unoptimized_lqp2 = get_unoptimized_logical_plan();
 
   std::vector<std::shared_ptr<AbstractExpression>> values;
   const auto unoptimized_lqp = get_split_unoptimized_logical_plan(values);
