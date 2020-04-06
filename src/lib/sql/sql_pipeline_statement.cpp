@@ -175,7 +175,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
   ParameterID parameter_id(0);
 
-  std::cout << "Unptimized: " << std::endl;
+  std::cout << "Unoptimized: " << std::endl;
 
   visit_lqp(unoptimized_lqp, [&values, &parameter_id](const auto& node) {
     if (node) {
