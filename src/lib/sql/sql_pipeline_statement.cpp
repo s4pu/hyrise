@@ -7,13 +7,17 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "all_type_variant.hpp"
+
 #include "SQLParser.h"
 #include "create_sql_parser_error_message.hpp"
 #include "expression/expression_utils.hpp"
+#include "expression/lqp_column_expression.hpp"
 #include "expression/typed_placeholder_expression.hpp"
 #include "expression/value_expression.hpp"
 #include "hyrise.hpp"
 #include "logical_query_plan/lqp_utils.hpp"
+#include "logical_query_plan/stored_table_node.hpp"
 #include "operators/export.hpp"
 #include "operators/import.hpp"
 #include "operators/maintenance/create_prepared_plan.hpp"
@@ -22,9 +26,12 @@
 #include "operators/maintenance/drop_table.hpp"
 #include "operators/maintenance/drop_view.hpp"
 #include "optimizer/optimizer.hpp"
+#include "resolve_type.hpp"
 #include "sql/sql_pipeline_builder.hpp"
 #include "sql/sql_plan_cache.hpp"
 #include "sql/sql_translator.hpp"
+#include "statistics/attribute_statistics.hpp"
+#include "statistics/table_statistics.hpp"
 #include "utils/assert.hpp"
 #include "utils/tracing/probes.hpp"
 
@@ -102,6 +109,66 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_unoptimized_lo
   return _unoptimized_logical_plan;
 }
 
+bool SQLPipelineStatement::check_column_distributions(const float distribution_threshold) {
+  auto& unoptimized_lqp = get_unoptimized_logical_plan();
+
+  const auto started_uniform_check = std::chrono::high_resolution_clock::now();
+
+  // Data in all used columns is uniformly distributed. Set to false once a non-uniform distribution is found
+  bool columns_distributed_uniformly = true;
+
+  // check used columns
+  visit_lqp(unoptimized_lqp, [&columns_distributed_uniformly, &distribution_threshold](const auto& node) {
+    if (node) {
+      for (auto& root_expression : node->node_expressions) {
+        visit_expression(root_expression, [&columns_distributed_uniformly, &distribution_threshold](auto& expression) {
+          if (expression->type == ExpressionType::LQPColumn) {
+            auto column_expression = std::dynamic_pointer_cast<LQPColumnExpression>(expression);
+
+            const auto& column_reference = column_expression->column_reference;
+            auto node = column_reference.original_node();
+
+            // could also be DummyTable
+            if (node->type == LQPNodeType::StoredTable) {
+              auto table_node = std::dynamic_pointer_cast<const StoredTableNode>(node);
+
+              const std::string table_name = table_node->table_name;
+              const auto table = Hyrise::get().storage_manager.get_table(table_name);
+              const auto& table_statistics = table->table_statistics();
+
+              const auto column_id = column_reference.original_column_id();
+
+              // generated for COUNT(*)
+              if (column_id != INVALID_COLUMN_ID) {
+                std::shared_ptr<BaseAttributeStatistics> column_statistics =
+                    table_statistics->column_statistics[column_id];
+
+                auto data_type = table->column_data_type(column_id);
+                resolve_data_type(data_type, [&](auto type) {
+                  using ColumnDataType = typename decltype(type)::type;
+
+                  std::shared_ptr<AttributeStatistics<ColumnDataType>> statistics =
+                      std::dynamic_pointer_cast<AttributeStatistics<ColumnDataType>>(column_statistics);
+                  if (!statistics->histogram->is_uniformly_distributed(distribution_threshold)) {
+                    columns_distributed_uniformly = false;
+                  }
+                });
+              }
+            }
+          }
+          return ExpressionVisitation::VisitArguments;
+        });
+      }
+    }
+    return LQPVisitation::VisitInputs;
+  });
+
+  const auto done_uniform_check = std::chrono::high_resolution_clock::now();
+  _metrics->uniform_check_duration =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(done_uniform_check - started_uniform_check);
+  return columns_distributed_uniformly;
+}
+
 void SQLPipelineStatement::expression_parameter_extraction(std::shared_ptr<AbstractExpression> &expression,
                                             std::vector<std::shared_ptr<AbstractExpression>>& values,
                                             ParameterID &next_parameter_id) {
@@ -130,25 +197,42 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_split_unoptimi
 
   ParameterID next_parameter_id(0);
 
-  if (_translation_info.cacheable) {
-    visit_lqp(unoptimized_lqp, [&values, &next_parameter_id](const auto& node) {
-      if (node) {
-        for (auto& root_expression : node->node_expressions) {
-          visit_expression(root_expression, [&values, &next_parameter_id](auto& expression) {
-            expression_parameter_extraction(expression, values, next_parameter_id);
-            return ExpressionVisitation::VisitArguments;
-          });
-        }
+  visit_lqp(unoptimized_lqp, [&values, &next_parameter_id](const auto& node) {
+    if (node) {
+      for (auto& root_expression : node->node_expressions) {
+        visit_expression(root_expression, [&values, &next_parameter_id](auto& expression) {
+          expression_parameter_extraction(expression, values, next_parameter_id);
+          return ExpressionVisitation::VisitArguments;
+        });
       }
-      return LQPVisitation::VisitInputs;
-    });
-  }
+    }
+    return LQPVisitation::VisitInputs;
+  });
 
   return unoptimized_lqp;
 }
 
 const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logical_plan() {
   if (_optimized_logical_plan) {
+    return _optimized_logical_plan;
+  }
+
+  auto is_uniformly_distributed = check_column_distributions(1000);
+  // views and non-uniformly distributed tables can not be cached
+  if (!_translation_info.cacheable || !is_uniformly_distributed) {
+    const auto started = std::chrono::high_resolution_clock::now();
+
+    // The optimizer works on the original unoptimized LQP nodes. After optimizing, the unoptimized version is also
+    // optimized, which could lead to subtle bugs. optimized_logical_plan holds the original values now.
+    // As the unoptimized LQP is only used for visualization, we can afford to recreate it if necessary.
+    auto unoptimized_lqp = get_unoptimized_logical_plan();
+    _unoptimized_logical_plan = nullptr;
+
+    _optimized_logical_plan = _optimizer->optimize(std::move(unoptimized_lqp));
+
+    const auto done = std::chrono::high_resolution_clock::now();
+    _metrics->optimization_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(done - started);
+
     return _optimized_logical_plan;
   }
 
@@ -168,11 +252,13 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
         // and concurrent translations might conflict.
         _optimized_logical_plan = cached_plan->instantiate(extracted_values);
         auto temp_optimized_logical_plan = _optimized_logical_plan->deep_copy();
-        _metrics->query_plan_cache_hit = true;
+        _metrics->lqp_cache_hit = true;
         _optimized_logical_plan = _post_caching_optimizer->optimize(std::move(temp_optimized_logical_plan));
         const auto done_cache = std::chrono::high_resolution_clock::now();
         _metrics->cache_duration =
             std::chrono::duration_cast<std::chrono::nanoseconds>(done_cache - started_preoptimization_cache);
+        _metrics->cache_duration -= _metrics->uniform_check_duration;
+
         return _optimized_logical_plan;
       }
     }
@@ -201,7 +287,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   auto prepared_plan = std::make_shared<PreparedPlan>(optimized_without_values, all_parameter_ids);
 
   // Cache newly created plan for the according sql statement
-  if (lqp_cache && _translation_info.cacheable) {
+  if (lqp_cache) {
     lqp_cache->set(unoptimized_lqp, prepared_plan);
   }
 
@@ -214,6 +300,7 @@ const std::shared_ptr<AbstractLQPNode>& SQLPipelineStatement::get_optimized_logi
   _metrics->cache_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
       done_preoptimization_cache - started_preoptimization_cache + done_postoptimization_cache -
       started_postoptimization_cache);
+  _metrics->cache_duration -= _metrics->uniform_check_duration;
 
   return _optimized_logical_plan;
 }
@@ -242,7 +329,8 @@ const std::shared_ptr<AbstractOperator>& SQLPipelineStatement::get_physical_plan
       }
 
       _physical_plan = (*cached_physical_plan)->deep_copy();
-      _metrics->query_plan_cache_hit = true;
+      _metrics->pqp_cache_hit = true;
+      _metrics->lqp_cache_hit = true;
     }
   }
 
@@ -260,7 +348,7 @@ const std::shared_ptr<AbstractOperator>& SQLPipelineStatement::get_physical_plan
   if (_use_mvcc == UseMvcc::Yes) _physical_plan->set_transaction_context_recursively(_transaction_context);
 
   // Cache newly created plan for the according sql statement (only if not already cached)
-  if (pqp_cache && !_metrics->query_plan_cache_hit && _translation_info.cacheable) {
+  if (pqp_cache && !_metrics->pqp_cache_hit && _translation_info.cacheable) {
     pqp_cache->set(_sql_string, _physical_plan);
   }
 
@@ -333,7 +421,7 @@ std::pair<SQLPipelineStatus, const std::shared_ptr<const Table>&> SQLPipelineSta
   DTRACE_PROBE9(HYRISE, SUMMARY, _sql_string.c_str(), _metrics->sql_translation_duration.count(),
                 _metrics->cache_duration.count(), _metrics->optimization_duration.count(),
                 _metrics->lqp_translation_duration.count(), _metrics->plan_execution_duration.count(),
-                _metrics->query_plan_cache_hit, get_tasks().size(), reinterpret_cast<uintptr_t>(this));
+                _metrics->lqp_cache_hit, get_tasks().size(), reinterpret_cast<uintptr_t>(this));
 
   return {SQLPipelineStatus::Success, _result_table};
 }

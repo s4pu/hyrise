@@ -48,6 +48,9 @@ class SQLPipelineStatementTest : public BaseTest {
     _table_int = load_table("resources/test_data/tbl/int_int_int.tbl", 2);
     Hyrise::get().storage_manager.add_table("table_int", _table_int);
 
+    _table_equal_and_not = load_table("resources/test_data/tbl/int_and_not_equal_distribution.tbl");
+    Hyrise::get().storage_manager.add_table("table_equal_and_not", _table_equal_and_not);
+
     TableColumnDefinitions column_definitions;
     column_definitions.emplace_back("a", DataType::Int, false);
     column_definitions.emplace_back("b", DataType::Float, false);
@@ -77,6 +80,7 @@ class SQLPipelineStatementTest : public BaseTest {
   std::shared_ptr<Table> _table_a;
   std::shared_ptr<Table> _table_b;
   std::shared_ptr<Table> _table_int;
+  std::shared_ptr<Table> _table_equal_and_not;
   std::shared_ptr<Table> _join_result;
 
   TableColumnDefinitions _int_float_column_definitions;
@@ -717,6 +721,86 @@ TEST_F(SQLPipelineStatementTest, MetaTableNoCaching) {
   EXPECT_EQ(_lqp_cache->size(), 0u);
   EXPECT_EQ(_pqp_cache->size(), 0u);
   EXPECT_FALSE(_pqp_cache->has(meta_table_query));
+}
+
+TEST_F(SQLPipelineStatementTest, ViewNoCaching) {
+  std::array<std::string, 4> queries = {
+    "CREATE table test (a int, b int, c int)",
+    "CREATE VIEW abc AS SELECT * FROM test",
+    "SELECT * FROM abc",
+    "DROP VIEW abc"
+  };
+
+  for (const auto &query : queries) {
+    auto sql_pipeline = SQLPipelineBuilder{query}
+                            .with_lqp_cache(_lqp_cache)
+                            .with_pqp_cache(_pqp_cache)
+                            .create_pipeline_statement();
+    sql_pipeline.get_result_table();
+  }
+
+  EXPECT_EQ(_lqp_cache->size(), 3u);
+  EXPECT_EQ(_pqp_cache->size(), 3u);
+}
+
+TEST_F(SQLPipelineStatementTest, ParameterizationOnUniformDistribution) {
+  const auto query1 = "SELECT * FROM table_equal_and_not WHERE equal = 3;";
+  const auto query2 = "SELECT * FROM table_equal_and_not WHERE equal = 4;";
+
+  auto sql_pipeline1 = SQLPipelineBuilder{query1}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline1.get_result_table();
+
+  auto sql_pipeline2 = SQLPipelineBuilder{query2}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline2.get_result_table();
+
+  EXPECT_EQ(_lqp_cache->size(), 1u);
+  EXPECT_EQ(_pqp_cache->size(), 2u);
+}
+
+TEST_F(SQLPipelineStatementTest, NoParameterizationOnNonUniformDistribution) {
+  const auto query1 = "SELECT * FROM table_equal_and_not WHERE notequal = 3;";
+  const auto query2 = "SELECT * FROM table_equal_and_not WHERE notequal = 4;";
+
+  auto sql_pipeline1 = SQLPipelineBuilder{query1}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline1.get_result_table();
+
+  auto sql_pipeline2 = SQLPipelineBuilder{query2}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline2.get_result_table();
+
+  EXPECT_EQ(_lqp_cache->size(), 0u);
+  EXPECT_EQ(_pqp_cache->size(), 2u);
+}
+
+TEST_F(SQLPipelineStatementTest, NoParameterizationOnMixedUniformDistribution) {
+  const auto query1 = "SELECT * FROM table_equal_and_not WHERE notequal = 3 AND equal = 3;";
+  const auto query2 = "SELECT * FROM table_equal_and_not WHERE notequal = 4 AND equal = 4;";
+
+  auto sql_pipeline1 = SQLPipelineBuilder{query1}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline1.get_result_table();
+
+  auto sql_pipeline2 = SQLPipelineBuilder{query2}
+                          .with_lqp_cache(_lqp_cache)
+                          .with_pqp_cache(_pqp_cache)
+      .create_pipeline_statement();
+  sql_pipeline2.get_result_table();
+
+  EXPECT_EQ(_lqp_cache->size(), 0u);
+  EXPECT_EQ(_pqp_cache->size(), 2u);
 }
 
 }  // namespace opossum

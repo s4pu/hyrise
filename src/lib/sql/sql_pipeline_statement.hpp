@@ -16,12 +16,14 @@ namespace opossum {
 // Holds relevant information about the execution of an SQLPipelineStatement.
 struct SQLPipelineStatementMetrics {
   std::chrono::nanoseconds sql_translation_duration{};
+  std::chrono::nanoseconds uniform_check_duration{};
   std::chrono::nanoseconds cache_duration{};
   std::chrono::nanoseconds optimization_duration{};
   std::chrono::nanoseconds lqp_translation_duration{};
   std::chrono::nanoseconds plan_execution_duration{};
 
-  bool query_plan_cache_hit = false;
+  bool pqp_cache_hit = false;
+  bool lqp_cache_hit = false;
 };
 
 enum class SQLPipelineStatus {
@@ -51,7 +53,8 @@ class SQLPipelineStatement : public Noncopyable {
   // Prefer using the SQLPipelineBuilder for constructing SQLPipelineStatements conveniently
   SQLPipelineStatement(const std::string& sql, std::shared_ptr<hsql::SQLParserResult> parsed_sql,
                        const UseMvcc use_mvcc, const std::shared_ptr<TransactionContext>& transaction_context,
-                       const std::shared_ptr<Optimizer>& optimizer, const std::shared_ptr<Optimizer>& post_caching_optimizer,
+                       const std::shared_ptr<Optimizer>& optimizer,
+                       const std::shared_ptr<Optimizer>& post_caching_optimizer,
                        const std::shared_ptr<SQLPhysicalPlanCache>& init_pqp_cache,
                        const std::shared_ptr<SQLLogicalPlanCache>& init_lqp_cache);
 
@@ -104,6 +107,8 @@ class SQLPipelineStatement : public Noncopyable {
   // table that already exists).
   // Throws an InvalidInputException if an invalid PQP is detected.
   static void _precheck_ddl_operators(const std::shared_ptr<AbstractOperator>& pqp);
+
+  bool check_column_distributions(const float distribution_threshold);
 
   const std::string _sql_string;
   const UseMvcc _use_mvcc;

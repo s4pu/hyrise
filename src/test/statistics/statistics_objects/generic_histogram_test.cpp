@@ -76,6 +76,52 @@ class GenericHistogramTest : public BaseTest {
   }
 };
 
+TEST_F(GenericHistogramTest, IsUniformlyDistributed) {
+  const auto int_equally_distributed_table = load_table("resources/test_data/tbl/int_equal_distribution.tbl");
+  const auto int_almost_equally_distributed_table =
+      load_table("resources/test_data/tbl/int_almost_equal_distribution.tbl");
+  const auto int_not_equally_distributed_table = load_table("resources/test_data/tbl/int_not_equal_distribution.tbl");
+  const auto string_table = load_table("resources/test_data/tbl/string.tbl");
+
+  const auto int_table_statistics_equal = TableStatistics::from_table(*int_equally_distributed_table);
+  const auto int_table_statistics_almost = TableStatistics::from_table(*int_almost_equally_distributed_table);
+  const auto int_table_statistics_not = TableStatistics::from_table(*int_not_equally_distributed_table);
+  const auto string_table_statistics = TableStatistics::from_table(*string_table);
+
+  for (const auto column_statistic : int_table_statistics_equal->column_statistics) {
+    const auto statistic = std::dynamic_pointer_cast<AttributeStatistics<int32_t>>(column_statistic);
+    ASSERT_TRUE(statistic);
+    const auto histogram = std::dynamic_pointer_cast<AbstractHistogram<int32_t>>(statistic->histogram);
+    ASSERT_TRUE(histogram);
+    ASSERT_TRUE(histogram->is_uniformly_distributed(0.05));
+  }
+
+  for (const auto column_statistic : int_table_statistics_almost->column_statistics) {
+    const auto statistic = std::dynamic_pointer_cast<AttributeStatistics<int32_t>>(column_statistic);
+    ASSERT_TRUE(statistic);
+    const auto histogram = std::dynamic_pointer_cast<AbstractHistogram<int32_t>>(statistic->histogram);
+    ASSERT_TRUE(histogram);
+    ASSERT_FALSE(histogram->is_uniformly_distributed(0.05));
+    ASSERT_TRUE(histogram->is_uniformly_distributed(0.4));
+  }
+
+  for (const auto column_statistic : int_table_statistics_not->column_statistics) {
+    const auto statistic = std::dynamic_pointer_cast<AttributeStatistics<int32_t>>(column_statistic);
+    ASSERT_TRUE(statistic);
+    const auto histogram = std::dynamic_pointer_cast<AbstractHistogram<int32_t>>(statistic->histogram);
+    ASSERT_TRUE(histogram);
+    ASSERT_FALSE(histogram->is_uniformly_distributed(0.05));
+  }
+
+  for (const auto column_statistic : string_table_statistics->column_statistics) {
+    const auto statistic = std::dynamic_pointer_cast<AttributeStatistics<pmr_string>>(column_statistic);
+    ASSERT_TRUE(statistic);
+    const auto histogram = std::dynamic_pointer_cast<AbstractHistogram<pmr_string>>(statistic->histogram);
+    ASSERT_TRUE(histogram);
+    ASSERT_TRUE(histogram->is_uniformly_distributed(0.05));
+  }
+}
+
 TEST_F(GenericHistogramTest, EstimateCardinalityAndPruningBasicInt) {
   const auto histogram = GenericHistogram<int32_t>{{12, 12345}, {123, 123456}, {2, 5}, {2, 2}};
   EXPECT_FLOAT_EQ(histogram.estimate_cardinality(PredicateCondition::Equals, 0), 0.f);
